@@ -23,9 +23,10 @@
 
     <!-- 省市联动选择器 -->
     <div class="tree-selector">
-        <span class="selector-label">📍 树形选择</span>
-        <select id="province-select" class="custom-select"></select>
-        <select id="city-select" class="custom-select"></select>
+        <div style="position: relative; flex:1;">
+            <input type="text" id="city-search" class="custom-select" placeholder="输入城市名称（中/英/日）..." autocomplete="off">
+            <div id="search-suggestions" class="search-suggestions"></div>
+        </div>
         <span id="confirm-city" class="view-btn">查看天气</span>
     </div>
 
@@ -73,7 +74,7 @@
 
     <!-- 脚标 -->
     <div class="footer-meta">
-        <span class="source-badge">⏐ Open-Meteo 全国城市天气 ⏐</span>
+        <span class="source-badge">⏐ Open-Meteo 城市天气 ⏐</span>
         <span id="update-timestamp">更新于 --:--</span>
     </div>
 </div>

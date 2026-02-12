@@ -199,3 +199,51 @@ body {
     content: "🎉";
     font-size: 0.9rem;
 }
+/* 全球城市搜索框 */
+.global-search-container {
+    background: rgba(220, 240, 250, 0.4);
+    backdrop-filter: blur(4px);
+    border-radius: 48px;
+    padding: 0.8rem 1.4rem;
+    margin: 0.5rem 0 1.2rem;
+    border: 0.5px solid rgba(50, 150, 210, 0.25);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+#city-search {
+    width: 50%;
+    min-width: 200px;
+}
+
+.search-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border-radius: 20px;
+    margin-top: 4px;
+    padding: 0.5rem 0;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+    z-index: 1000;
+    max-height: 300px;
+    overflow-y: auto;
+    display: none;
+    border: 0.5px solid rgba(60,160,210,0.3);
+    backdrop-filter: blur(8px);
+}
+
+.search-suggestions div {
+    padding: 0.6rem 1.2rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #04586b;
+    transition: background 0.1s;
+}
+
+.search-suggestions div:hover {
+    background: rgba(80, 180, 230, 0.15);
+}
