@@ -298,20 +298,55 @@ async function fetchWeatherAndUpdate() {
 }
 
 // ========== IP定位 + 最近城市匹配 ==========
+// ---------- 使用支持 HTTPS 的 IP 定位服务（双备用）----------
 async function getLocationByIP() {
-    try {
-        const response = await fetch('https://ip-api.com/json/?fields=status,lat,lon,city,regionName,country');
-        if (!response.ok) throw new Error('IP定位服务响应失败');
-        const data = await response.json();
-        if (data.status === 'success') {
-            return { lat: data.lat, lon: data.lon, city: data.city, region: data.regionName };
+    const apis = [
+        'https://ipapi.co/json/',      // 免费版：每天1000次，无需key
+        'https://ipinfo.io/json'      // 免费版：每天1000次，无需key
+    ];
+
+    for (const api of apis) {
+        try {
+            const response = await fetch(api);
+            if (!response.ok) continue;
+
+            const data = await response.json();
+
+            // 处理 ipapi.co 返回的数据
+            if (api.includes('ipapi.co')) {
+                if (data.latitude && data.longitude) {
+                    return {
+                        lat: parseFloat(data.latitude),
+                        lon: parseFloat(data.longitude),
+                        city: data.city || '',
+                        region: data.region || '',
+                        country: data.country_name || ''
+                    };
+                }
+            }
+
+            // 处理 ipinfo.io 返回的数据
+            if (api.includes('ipinfo.io')) {
+                if (data.loc) {
+                    const [lat, lon] = data.loc.split(',');
+                    return {
+                        lat: parseFloat(lat),
+                        lon: parseFloat(lon),
+                        city: data.city || '',
+                        region: data.region || '',
+                        country: data.country || ''
+                    };
+                }
+            }
+        } catch (e) {
+            console.warn(`IP定位服务 ${api} 失败，尝试下一个...`, e);
+            continue;
         }
-    } catch (e) {
-        console.warn('IP定位失败，使用默认城市', e);
     }
+
+    console.warn('所有IP定位服务均失败，使用默认城市（济南）');
     return null;
 }
-
 function findNearestCity(lat, lon) {
     let minDist = Infinity;
     let nearestCity = null;
