@@ -3,6 +3,7 @@ let currentCity = { name: "济南市", lat: 36.6512, lon: 117.1201, province: "�
 let mode = 'realtime';          // 'realtime' 或 'forecast'
 let forecastDayIndex = 0;       // 当 mode='forecast' 时，当前显示的预报日期索引（0=今天，1=明天...）
 let cachedDailyData = null;    // 缓存最近一次获取的 daily 数据
+let latestSearchResults = [];   // 缓存最近一次搜索结果，供按钮和回车复用
 
 // ========== 更新公历、农历、节日显示（头部）==========
 function updateDateDisplay(date = new Date()) {
@@ -280,7 +281,7 @@ async function fetchWeatherAndUpdate() {
                 forecastDayIndex = 0;
                 renderRealtimeUI(d);
             } else {
-                renderForecastUI(forecastDayIndexs);
+                renderForecastUI(forecastDayIndex);
             }
         }
 
@@ -375,9 +376,87 @@ function findNearestCity(lat, lon) {
 // ========== 2. 全球城市搜索（Nominatim 免费 API）=========
 let searchTimeout = null;
 
+function applySelectedCity(name, lat, lon) {
+    currentCity = {
+        name,
+        lat: parseFloat(lat),
+        lon: parseFloat(lon),
+        province: ''
+    };
+    document.getElementById('city-name').textContent = currentCity.name;
+    mode = 'realtime';
+    forecastDayIndex = 0;
+    fetchWeatherAndUpdate();
+}
+
+function renderSearchSuggestions(results, suggestionsDiv, searchInput) {
+    if (!results.length) {
+        suggestionsDiv.style.display = 'none';
+        return;
+    }
+
+    suggestionsDiv.innerHTML = '';
+    results.forEach(item => {
+        let displayName = item.display_name.split(',')[0];
+        if (item.address?.country_code) {
+            displayName += `, ${item.address.country_code.toUpperCase()}`;
+        }
+
+        const div = document.createElement('div');
+        div.textContent = displayName;
+        div.dataset.lat = item.lat;
+        div.dataset.lon = item.lon;
+        div.dataset.name = displayName;
+        div.addEventListener('click', function() {
+            applySelectedCity(this.dataset.name, this.dataset.lat, this.dataset.lon);
+            suggestionsDiv.style.display = 'none';
+            searchInput.value = this.dataset.name;
+        });
+        suggestionsDiv.appendChild(div);
+    });
+    suggestionsDiv.style.display = 'block';
+}
+
+async function searchCities(query) {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=8&addressdetails=1&featureType=city`;
+    const response = await fetch(url, {
+        headers: { 'User-Agent': 'WeatherApp/1.0' }
+    });
+    if (!response.ok) throw new Error('搜索失败');
+    return response.json();
+}
+
+async function submitSearch(searchInput, suggestionsDiv) {
+    const query = searchInput.value.trim();
+    if (query.length < 2) {
+        suggestionsDiv.style.display = 'none';
+        return;
+    }
+
+    let results = latestSearchResults;
+    if (!results.length || !results.some(item => item.display_name.includes(query))) {
+        results = await searchCities(query);
+    }
+
+    if (!results.length) {
+        suggestionsDiv.style.display = 'none';
+        return;
+    }
+
+    const best = results[0];
+    let name = best.display_name.split(',')[0];
+    if (best.address?.country_code) {
+        name += `, ${best.address.country_code.toUpperCase()}`;
+    }
+    applySelectedCity(name, best.lat, best.lon);
+    suggestionsDiv.style.display = 'none';
+    searchInput.value = name;
+}
+
 function initCitySearch() {
     const searchInput = document.getElementById('city-search');
     const suggestionsDiv = document.getElementById('search-suggestions');
+    const confirmBtn = document.getElementById('confirm-city');
 
     searchInput.addEventListener('input', function() {
         const query = this.value.trim();
@@ -389,53 +468,31 @@ function initCitySearch() {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(async () => {
             try {
-                const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=8&addressdetails=1&featureType=city`;
-                const response = await fetch(url, {
-                    headers: { 'User-Agent': 'WeatherApp/1.0' } // 必须设置
-                });
-                if (!response.ok) throw new Error('搜索失败');
-                const data = await response.json();
-
-                if (data.length === 0) {
-                    suggestionsDiv.style.display = 'none';
-                    return;
-                }
-
-                suggestionsDiv.innerHTML = '';
-                data.forEach(item => {
-                    // 提取城市名 + 国家
-                    let displayName = item.display_name.split(',')[0];
-                    if (item.address?.country_code) {
-                        displayName += `, ${item.address.country_code.toUpperCase()}`;
-                    }
-                    const div = document.createElement('div');
-                    div.textContent = displayName;
-                    div.dataset.lat = item.lat;
-                    div.dataset.lon = item.lon;
-                    div.dataset.name = displayName;
-                    div.addEventListener('click', function() {
-                        // 点击后更新当前城市
-                        currentCity = {
-                            name: this.dataset.name,
-                            lat: parseFloat(this.dataset.lat),
-                            lon: parseFloat(this.dataset.lon),
-                            province: ''
-                        };
-                        document.getElementById('city-name').textContent = currentCity.name;
-                        mode = 'realtime';
-                        forecastDayIndex = 0;
-                        fetchWeatherAndUpdate();
-                        suggestionsDiv.style.display = 'none';
-                        searchInput.value = this.dataset.name; // 输入框显示选中城市
-                    });
-                    suggestionsDiv.appendChild(div);
-                });
-                suggestionsDiv.style.display = 'block';
+                latestSearchResults = await searchCities(query);
+                renderSearchSuggestions(latestSearchResults, suggestionsDiv, searchInput);
             } catch (e) {
                 console.error('城市搜索出错:', e);
                 suggestionsDiv.style.display = 'none';
             }
         }, 300); // 防抖
+    });
+
+    searchInput.addEventListener('keydown', async function(e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        try {
+            await submitSearch(searchInput, suggestionsDiv);
+        } catch (err) {
+            console.error('回车查询失败:', err);
+        }
+    });
+
+    confirmBtn.addEventListener('click', async function() {
+        try {
+            await submitSearch(searchInput, suggestionsDiv);
+        } catch (err) {
+            console.error('按钮查询失败:', err);
+        }
     });
 
     // 点击页面其他区域隐藏建议框
@@ -445,9 +502,28 @@ function initCitySearch() {
         }
     });
 }
+
+function getLocationFromBrowser() {
+    if (!navigator.geolocation) return Promise.resolve(null);
+
+    return new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                resolve({
+                    lat: pos.coords.latitude,
+                    lon: pos.coords.longitude,
+                    source: 'gps'
+                });
+            },
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
+        );
+    });
+}
 // ========== 1. IP定位：不再匹配中国城市 ==========
 async function initLocation() {
-    const ipLoc = await getLocationByIP();
+    const browserLoc = await getLocationFromBrowser();
+    const ipLoc = browserLoc || await getLocationByIP();
     if (ipLoc) {
         // 直接使用定位返回的经纬度和城市名
         let cityName = ipLoc.city || '当前位置';
@@ -499,7 +575,6 @@ async function init() {
     initCitySearch();
 
     // 更新界面
-    document.getElementById('confirm-city').addEventListener('click', fetchWeatherAndUpdate);
     document.getElementById('city-name').textContent = currentCity.name;
     updateDateDisplay();
     fetchWeatherAndUpdate();
